@@ -3,7 +3,9 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const ejs = require('ejs');
 const mongoose = require('mongoose');
-const md5 = require('md5');
+const bcrypt = require('bcrypt');
+// how many times to salt the password
+const saltRounds = 10;
 
 const app = express();
 
@@ -48,36 +50,41 @@ app.get("/register", (req, res) => {
 
 
 app.post("/register", (req, res) => {
-    const newUser = new User({
-        email: req.body.username,
-        password: md5(req.body.password)
+
+    bcrypt.hash(req.body.password, saltRounds, (err, hash) => {
+        // create user only when we generated our hash
+        const newUser = new User({
+            email: req.body.username,
+            password: hash
+        });
+
+        newUser.save().then(
+            () => {
+                res.render("secrets.ejs");
+            }
+        ).catch(
+            (err) => {
+                console.log(err);
+            }
+        );
     });
 
-    newUser.save().then(
-        () => {
-            res.render("secrets.ejs");
-        }
-    ).catch(
-        (err) => {
-            console.log(err);
-        }
-    );
 });
 
 
 app.post("/login", (req, res) => {
     const username = req.body.username;
-    const password = md5(req.body.password);
+    const password = req.body.password;
 
     // when it reaches this step, mongoose decrypts the password in order to fulfill the findOne
     User.findOne({ email: username }).then(
         (foundUser) => {
             // if we found the user with the specific email
             if (foundUser) {
-                // if the email found has the specific password the user typed in we render secrets
-                if (foundUser.password === password) {
+                // compare the password that the user types with the one inside db
+                if (bcrypt.compareSync(password, foundUser.password)) {
                     res.render("secrets.ejs");
-                }
+                };
             }
         }
     ).catch(
