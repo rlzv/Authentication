@@ -7,6 +7,8 @@ const session = require('express-session');
 const passport = require('passport');
 //const localStrategy = require('passport-local');
 const passportLocalMongoose = require('passport-local-mongoose');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const findOrCreate = require('mongoose-findorcreate');
 
 const app = express();
 
@@ -36,24 +38,74 @@ mongoose.connect("mongodb://localhost:27017/userAuthDB", {
 // Schema created from the mongoose schema class
 const userSchema = new mongoose.Schema({
     email: String,
-    password: String
+    password: String,
+    googleId: String
 });
 
 // add passport-local-mongoose to the mongoose schema
 // to hash and salt passwords and to save users into the DB
 userSchema.plugin(passportLocalMongoose);
+userSchema.plugin(findOrCreate);
 
 const User = mongoose.model("User", userSchema);
 
 passport.use(User.createStrategy());
 
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser());
+// Serialize and Deserialize working for any kind of authentication
+passport.serializeUser((user, done) => {
+    done(null, user.id);
+});
+
+passport.deserializeUser((id, done) => {
+    User.findById(id).then(
+        (user) => {
+            done(user);
+        }
+    ).catch(
+        (err) => {
+            console.log(err);
+        }
+    );
+});
+
+// google strategy to login our user
+passport.use(new GoogleStrategy({
+        clientID: process.env.CLIENT_ID,
+        clientSecret: process.env.CLIENT_SECRET,
+        callbackURL: "http://localhost:3000/auth/google/secrets",
+        // retrieve profile info from user info (endpoint on Google)
+        userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo"
+    },
+    (accessToken, refreshToken, profile, cb) => {
+        //console.log(profile);
+        // we use the data that we get back from googleId to find or create users
+        User.findOrCreate({ googleId: profile.id }, (err, user) => {
+            return cb(err, user);
+        });
+    }
+));
+
 
 
 app.get("/", (req, res) => {
     res.render("home.ejs");
 });
+
+
+// initiate auth with google
+app.get("/auth/google",
+
+    passport.authenticate('google', { scope: ['profile'] })
+);
+
+
+app.get("/auth/google/secrets",
+    passport.authenticate('google', { failureRedirect: '/login' }),
+    (req, res) => {
+        // Successful authentication, redirect to secrets.
+        res.redirect("/secrets");
+    }
+);
 
 
 app.get("/login", (req, res) => {
@@ -81,7 +133,6 @@ app.get("/secrets", nocache, (req, res) => { // route where you remove the cache
     } else {
         res.redirect("/login");
     }
-
 });
 
 
