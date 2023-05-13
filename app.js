@@ -39,7 +39,8 @@ mongoose.connect("mongodb://localhost:27017/userAuthDB", {
 const userSchema = new mongoose.Schema({
     email: String,
     password: String,
-    googleId: String
+    googleId: String,
+    secret: String
 });
 
 // add passport-local-mongoose to the mongoose schema
@@ -130,12 +131,72 @@ let nocache = (req, res, next) => {
 // remove the cache from /secrets page so when you hit prev button, you will be redirected to the login page!!
 app.get("/secrets", nocache, (req, res) => { // route where you remove the cache
     //if the user is authenticated we render secrets page
+    // (we don't need anymore to check if user is authenticated)
+    // if (req.isAuthenticated()) {
+    //     res.render("secrets.ejs");
+    // } else {
+    //     res.redirect("/login");
+    // }
+    // User.find({ 'secretList': { $ne: null } }).then(
+
+    //     )
+    // look to the secret field in the db and pick where the user's secret field is not null
+    User.find({ "secret": { $ne: null } }).then(
+        (foundUser) => {
+            if (foundUser) {
+                res.render("secrets.ejs", { usersWithSecrets: foundUser });
+            }
+        }
+    ).catch(
+        (err) => {
+            console.log(err);
+        }
+    );
+});
+
+
+app.get("/submit", (req, res) => {
     if (req.isAuthenticated()) {
-        res.render("secrets.ejs");
+        res.render("submit.ejs");
     } else {
         res.redirect("/login");
     }
 });
+
+
+app.post("/submit", (req, res) => {
+    const submitSecret = req.body.secret;
+
+    //console.log(req.user);
+
+    if (req.isAuthenticated()) {
+        User.findById(req.user.id).then(
+            (foundUser) => {
+                if (foundUser) {
+                    //if the user exists, attach the secret he wrote
+                    foundUser.secret = submitSecret;
+                    // save what he typed
+                    foundUser.save().then(
+                        () => {
+                            res.redirect("/secrets");
+                        }
+                    ).catch(
+                        (err) => {
+                            console.log(err);
+                        }
+                    )
+                }
+
+            }
+        ).catch(
+            (err) => {
+                console.log(err);
+            }
+        );
+    }
+});
+
+
 
 
 app.get("/logout", (req, res, next) => {
@@ -164,7 +225,7 @@ app.post("/register", (req, res) => {
             // so i think passport.authenticate("local") checks the database and authenticate if the data matches and maybe req.login is not needed
             passport.authenticate("local")(req, res, () => {
                 res.redirect("/secrets");
-            })
+            });
         }
     });
 });
