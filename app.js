@@ -56,14 +56,16 @@ passport.serializeUser((user, done) => {
     done(null, user.id);
 });
 
+// This method uses promised-based API of Mongoose to retrieve the user from db,
+// and pass it to the 'done()' fun. If err, passes 'done()' as first argument
 passport.deserializeUser((id, done) => {
     User.findById(id).then(
         (user) => {
-            done(user);
+            done(null, user);
         }
     ).catch(
         (err) => {
-            console.log(err);
+            done(err, null);
         }
     );
 });
@@ -95,7 +97,7 @@ app.get("/", (req, res) => {
 // initiate auth with google
 app.get("/auth/google",
 
-    passport.authenticate('google', { scope: ['profile'] })
+    passport.authenticate('google', { scope: ['email', 'profile'] })
 );
 
 
@@ -168,24 +170,22 @@ app.post("/register", (req, res) => {
 });
 
 
-app.post("/login", (req, res, next) => {
+app.post("/login", (req, res) => {
 
     const user = new User({
         username: req.body.username,
         password: req.body.password
     });
 
-    passport.authenticate("local")(req, res, () => {
-        req.login(user, (err) => {
-            if (err) {
-                return next(err);
-            } else {
-                return res.redirect("/secrets");
-            }
-        });
-    })
-
-
+    req.login(user, (err) => {
+        if (err) {
+            console.log(err);
+        } else {
+            passport.authenticate("local")(req, res, () => {
+                res.redirect("/secrets");
+            });
+        }
+    });
 });
 
 
